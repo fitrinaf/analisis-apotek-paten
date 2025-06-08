@@ -391,10 +391,9 @@ with tabs[0]:
 
         # Create attractive upload area
     uploaded_file = st.file_uploader(
-            "", 
+            "Pilih File Excel:", 
             type=["xlsx", "xls"], 
-            key=f"file_uploader_{selected_month}",
-            label_visibility="collapsed"
+            key=f"file_uploader_{selected_month}"
     )
     
     if uploaded_file is not None:
@@ -456,6 +455,7 @@ with tabs[0]:
                 # Display success message
                 st.success(f"✅ Data bulan {month_names[selected_month]} berhasil di-upload dan diproses!")
                 
+                
                 # Display preview
                 #with st.expander(f"Preview Data Bulan {month_names[selected_month]}", expanded=True):
                     # Data stats in cards
@@ -488,32 +488,51 @@ with tabs[0]:
                     
         except Exception as e:
             st.error(f"❌ Error processing file: {str(e)}")
-    
-    # Display uploaded files summary
-    if st.session_state.monthly_files:
+            
+
+# Display uploaded files summary
+    if st.session_state.monthly_files and len(st.session_state.monthly_files) > 0:
         st.markdown("<h3 class='sub-header' style='margin-bottom: 1rem;'>🗂️ File Data yang Sudah Diupload</h3>", unsafe_allow_html=True)
-        
-        # Create grid of month cards
+    
+    # Create grid of month cards
         cols = st.columns(4)
-        
+    
         for i, (month_key, data) in enumerate(sorted(st.session_state.monthly_files.items(), 
-                                                     key=lambda x: x[1]['month_number'])):
+                                                 key=lambda x: x[1]['month_number'])):
             with cols[i % 4]:
                 month_name = data['month_name']
-                
-                st.markdown(f"""
-                <div class="stat-card" style="margin-bottom: 1rem;">
-                    <div class="stat-label">Bulan</div>
-                    <div class="stat-number">{month_name}</div>
-                    <div>
-                        <span class="month-tag" style="margin-bottom: 5px;">Product: {len(data['df_agg'])}</span>
-                        <span class="month-tag">Qty: {int(data['df_agg']['Qty'].sum()):,}</span>
+            
+            # Container untuk card dengan tombol delete
+                card_container = st.container()
+            
+            # Layout: card content dan tombol delete berdampingan
+                col1, col2 = st.columns([0.9, 0.1])
+            
+                with col1:
+                    st.markdown(f"""
+                    <div class="stat-card" style="margin-bottom: 1rem; padding-right: 30px;">
+                        <div class="stat-label">Bulan</div>
+                        <div class="stat-number">{month_name}</div>
+                        <div>
+                            <span class="month-tag" style="margin-bottom: 5px;">Product: {len(data['df_agg'])}</span>
+                            <span class="month-tag">Qty: {int(data['df_agg']['Qty'].sum()):,}</span>
+                        </div>
                     </div>
-                </div>
-                """, unsafe_allow_html=True)
-        
-        # st.success(f"✅ Data berhasil di-upload dan diproses!")
-
+                    """, unsafe_allow_html=True)
+            
+                with col2:
+                # Posisi tombol delete di kanan atas
+                    st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+                    if st.button("✕", key=f"delete_{month_key}", 
+                            help=f"Hapus data {month_name}"):
+                        del st.session_state.monthly_files[month_key]
+                        if 'integrated_df' in st.session_state:
+                            del st.session_state.integrated_df
+                        if 'df_transformed' in st.session_state:
+                            del st.session_state.df_transformed
+                        if 'df_aggregated' in st.session_state:
+                            del st.session_state.df_aggregated
+                        st.rerun()
 
 # with tabs[1]:
     #st.markdown("<h2 class='sub-header'>🔄 Integrasi & Transformasi Data</h2>", unsafe_allow_html=True)
@@ -755,7 +774,8 @@ with tabs[1]:
     
                 scatter_df = df_result.copy()
                     # Jalankan PCA ke 2 komponen
-                pca = PCA(n_components=2, random_state=42)
+                n_components = 2 if min(X.shape) >= 2 else 1
+                pca = PCA(n_components=n_components, random_state=42)
                 X_pca = pca.fit_transform(X)
 
                 # Ambil nama-nama bulan dari kolom Qty_*
@@ -767,10 +787,14 @@ with tabs[1]:
     # Buat dataframe untuk plotting
                 scatter_df = pd.DataFrame({
                     'Dimensi 1': X_pca[:,0],
-                    'Dimensi 2': X_pca[:,1],
                     'Cluster': st.session_state.cluster_labels,
                     'Item Name': st.session_state.df_transformed['Item Name']
                 })
+
+                if X_pca.shape[1] >= 2:
+                    scatter_df['Dimensi 2'] = X_pca[:, 1]
+                else:
+                    scatter_df['Dimensi 2'] = 0 
                 
                 # IMPORTANT: Scatter plot adalah referensi utama
                 # Update df_result agar cluster-nya mengikuti scatter plot
